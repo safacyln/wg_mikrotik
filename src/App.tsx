@@ -1,9 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { WireGuardView } from './views/WireGuardView'
 import { IpCalcView } from './views/IpCalcView'
 import { CgnatView } from './views/CgnatView'
 
 type View = 'wg' | 'ipcalc' | 'cgnat'
+
+const pageTitles: Record<View, string> = {
+  wg: 'WireGuard Config Generator (MikroTik) - LogiSafe Araçları',
+  ipcalc: 'IP Adresi ve Subnet Hesaplayıcı - LogiSafe Araçları',
+  cgnat: 'CGNAT Netmap / RADIUS Üretici - LogiSafe Araçları',
+}
 
 const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
   {
@@ -44,6 +50,10 @@ const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
 
 export default function App() {
   const [view, setView] = useState<View>('wg')
+
+  useEffect(() => {
+    document.title = pageTitles[view]
+  }, [view])
 
   return (
     <div className="mx-auto grid min-h-screen max-w-[1240px] grid-cols-1 md:grid-cols-[240px_1fr]">
