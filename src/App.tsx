@@ -1,385 +1,99 @@
 import { useState } from 'react'
-import { Field, inputClass } from './components/Field'
-import { CopyButton } from './components/CopyButton'
-import { DownloadButton } from './components/DownloadButton'
-import { QrCode } from './components/QrCode'
-import { generateKeyPair, generatePresharedKey } from './lib/wireguard'
-import { addOffset, isValidIPv4 } from './lib/ip'
-import {
-  mikrotikServerConfig,
-  mikrotikClientConfig,
-  wgQuickClientConfig,
-  type ServerSettings,
-  type ClientEntry,
-  type KeySet,
-} from './lib/configs'
+import { WireGuardView } from './views/WireGuardView'
+import { IpCalcView } from './views/IpCalcView'
+import { CgnatView } from './views/CgnatView'
 
-type OutputTab = 'mikrotik-server' | 'mikrotik-client' | 'client-conf'
+type View = 'wg' | 'ipcalc' | 'cgnat'
 
-interface GeneratedResult {
-  settings: ServerSettings
-  keys: KeySet
-  clients: ClientEntry[]
-}
-
-const partnerLinks = [
+const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
   {
-    name: 'LogiSpot',
-    description: 'Cloud Hotspot çözümü ile misafir ağı ve internet erişim yönetimi.',
+    id: 'wg',
+    label: 'WireGuard Generator',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4 flex-none opacity-85">
+        <rect x="5" y="11" width="14" height="9" rx="1.5" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    ),
   },
   {
-    name: 'LogiFeeds',
-    description:
-      "USOM, ESB ve BTK'nın ilettiği engelleme ve yasaklanması gereken kararları otomatik olarak uygulayan engelleme sistemi.",
+    id: 'ipcalc',
+    label: 'IP Adresi ve Subnet Hesaplayıcı',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4 flex-none opacity-85">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+    ),
   },
   {
-    name: 'MikroTik Danışmanlık',
-    description: 'LogiSafe MikroTik network danışmanlık hizmetleri ile ISP planlama.',
-  },
-  {
-    name: 'DDoS Danışmanlık',
-    description: 'LogiSafe DDoS koruma danışmanlık ve mitigasyon çözümleri.',
+    id: 'cgnat',
+    label: 'CGNAT / RADIUS',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4 flex-none opacity-85">
+        <circle cx="5" cy="12" r="2.2" />
+        <circle cx="19" cy="5" r="2.2" />
+        <circle cx="19" cy="19" r="2.2" />
+        <path d="M7 11l10-5M7 13l10 5" />
+      </svg>
+    ),
   },
 ]
 
 export default function App() {
-  const [endpoint, setEndpoint] = useState('')
-  const [listenPort, setListenPort] = useState(51820)
-  const [serverInterfaceName, setServerInterfaceName] = useState('wireguard1')
-  const [serverAddress, setServerAddress] = useState('10.10.0.1')
-  const [serverCidr, setServerCidr] = useState(24)
-  const [mtu, setMtu] = useState(1420)
-  const [dns, setDns] = useState('1.1.1.1, 1.0.0.1')
-  const [allowedIPs, setAllowedIPs] = useState('0.0.0.0/0')
-  const [persistentKeepalive, setPersistentKeepalive] = useState(25)
-  const [usePresharedKey, setUsePresharedKey] = useState(true)
-  const [clientCount, setClientCount] = useState(1)
-
-  const [error, setError] = useState('')
-  const [result, setResult] = useState<GeneratedResult | null>(null)
-  const [outputTab, setOutputTab] = useState<OutputTab>('mikrotik-server')
-  const [activeClientIndex, setActiveClientIndex] = useState(0)
-
-  function handleGenerate() {
-    if (!endpoint.trim()) {
-      setError('Server endpoint (public IP veya hostname) zorunludur.')
-      return
-    }
-    if (!isValidIPv4(serverAddress)) {
-      setError('Server tünel IP adresi geçersiz.')
-      return
-    }
-    if (clientCount < 1 || clientCount > 250) {
-      setError('Client sayısı 1 ile 250 arasında olmalıdır.')
-      return
-    }
-    setError('')
-
-    const settings: ServerSettings = {
-      endpoint: endpoint.trim(),
-      listenPort,
-      serverInterfaceName: serverInterfaceName.trim() || 'wireguard1',
-      serverAddress,
-      serverCidr,
-      mtu,
-      dns: dns.trim(),
-      allowedIPs: allowedIPs.trim() || '0.0.0.0/0',
-      persistentKeepalive,
-      usePresharedKey,
-    }
-
-    const serverKeys = generateKeyPair()
-    const keys: KeySet = {
-      serverPrivateKey: serverKeys.privateKey,
-      serverPublicKey: serverKeys.publicKey,
-    }
-
-    const clients: ClientEntry[] = Array.from({ length: clientCount }, (_, i) => {
-      const pair = generateKeyPair()
-      return {
-        name: `Client-${i + 1}`,
-        address: addOffset(serverAddress, i + 1),
-        privateKey: pair.privateKey,
-        publicKey: pair.publicKey,
-        presharedKey: usePresharedKey ? generatePresharedKey() : '',
-      }
-    })
-
-    setResult({ settings, keys, clients })
-    setActiveClientIndex(0)
-    setOutputTab('mikrotik-server')
-  }
+  const [view, setView] = useState<View>('wg')
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] px-4 py-12 text-slate-200">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-center text-4xl font-semibold tracking-tight text-slate-50 sm:text-5xl">
-          WireGuard Config Generator
-        </h1>
-        <p className="mt-3 text-center text-slate-400">
-          MikroTik server, MikroTik client ve Windows / Mobil client konfigürasyonlarını tek
-          formdan oluşturun.
-        </p>
-
-        <div className="mt-10 rounded-2xl border border-white/10 bg-[#0d1018] p-6 sm:p-8">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Server Endpoint (Public IP / Hostname)">
-              <input
-                className={inputClass}
-                placeholder="örn. vpn.firmaniz.com veya 1.2.3.4"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-              />
-            </Field>
-            <Field label="Dinleme Portu (Listen Port)">
-              <input
-                type="number"
-                className={inputClass}
-                value={listenPort}
-                onChange={(e) => setListenPort(Number(e.target.value))}
-              />
-            </Field>
-
-            <Field label="Server Arayüz Adı (MikroTik interface)">
-              <input
-                className={inputClass}
-                value={serverInterfaceName}
-                onChange={(e) => setServerInterfaceName(e.target.value)}
-              />
-            </Field>
-            <Field label="Server Tünel IP Adresi">
-              <input
-                className={inputClass}
-                placeholder="örn. 10.10.0.1"
-                value={serverAddress}
-                onChange={(e) => setServerAddress(e.target.value)}
-              />
-            </Field>
-
-            <Field label="Subnet (CIDR)">
-              <input
-                type="number"
-                className={inputClass}
-                value={serverCidr}
-                onChange={(e) => setServerCidr(Number(e.target.value))}
-              />
-            </Field>
-            <Field label="MTU">
-              <input
-                type="number"
-                className={inputClass}
-                value={mtu}
-                onChange={(e) => setMtu(Number(e.target.value))}
-              />
-            </Field>
-
-            <Field label="Client DNS">
-              <input
-                className={inputClass}
-                value={dns}
-                onChange={(e) => setDns(e.target.value)}
-              />
-            </Field>
-            <Field label="Client Allowed IPs (tünelden geçecek trafik)">
-              <input
-                className={inputClass}
-                value={allowedIPs}
-                onChange={(e) => setAllowedIPs(e.target.value)}
-              />
-            </Field>
-
-            <Field label="Persistent Keepalive (sn)">
-              <input
-                type="number"
-                className={inputClass}
-                value={persistentKeepalive}
-                onChange={(e) => setPersistentKeepalive(Number(e.target.value))}
-              />
-            </Field>
-            <Field label="Kaç client için config üretilecek?">
-              <input
-                type="number"
-                min={1}
-                max={250}
-                className={inputClass}
-                value={clientCount}
-                onChange={(e) => setClientCount(Number(e.target.value))}
-              />
-            </Field>
-          </div>
-
-          <label className="mt-5 flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={usePresharedKey}
-              onChange={(e) => setUsePresharedKey(e.target.checked)}
-              className="h-4 w-4 rounded border-white/20 bg-[#11141c] accent-emerald-500"
-            />
-            Preshared key kullan (ek güvenlik katmanı)
-          </label>
-
-          {error && (
-            <p className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleGenerate}
-              className="rounded-lg bg-emerald-500 px-6 py-2.5 font-semibold text-emerald-950 transition hover:bg-emerald-400"
-            >
-              Oluştur
-            </button>
+    <div className="mx-auto grid min-h-screen max-w-[1240px] grid-cols-1 md:grid-cols-[240px_1fr]">
+      <aside className="rack-rail relative border-b border-border-soft px-5 py-5 md:border-b-0 md:border-r md:px-0 md:py-7">
+        <div className="flex items-center gap-2.5 px-0 pb-3.5 md:px-6 md:pb-[22px]">
+          <div className="brand-mark" />
+          <div>
+            <div className="text-[14.5px] font-semibold tracking-tight text-text">LogiSafe</div>
+            <span className="mt-px block font-mono text-[10.5px] tracking-wide text-text-dim">
+              ÜCRETSİZ ARAÇLAR
+            </span>
           </div>
         </div>
 
-        {result && (
-          <div className="mt-10 rounded-2xl border border-white/10 bg-[#0d1018] p-6 sm:p-8">
-            <div className="flex flex-wrap gap-2 border-b border-white/10 pb-4">
-              {[
-                { id: 'mikrotik-server', label: 'MikroTik Server' },
-                { id: 'mikrotik-client', label: 'MikroTik Client' },
-                { id: 'client-conf', label: 'Windows / Mobil Client' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setOutputTab(tab.id as OutputTab)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                    outputTab === tab.id
-                      ? 'bg-emerald-500 text-emerald-950'
-                      : 'bg-white/5 text-slate-300 hover:bg-white/10'
+        <div className="hidden font-mono text-[11px] tracking-wide text-text-dim md:block md:px-6 md:pb-[18px]">
+          [<span className="text-amber">admin</span>@logisafe] &gt; /tools/
+          <span className="animate-[blink_1.1s_step-end_infinite] text-teal">_</span>
+        </div>
+
+        <nav className="flex gap-2 overflow-x-auto px-0 py-1 md:flex-col md:gap-0.5 md:overflow-visible md:px-3">
+          {navItems.map((item) => {
+            const active = view === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                className={`relative flex items-center gap-[11px] whitespace-nowrap rounded-[3px] border px-3 py-[11px] text-left text-[13.5px] font-medium transition md:whitespace-normal ${
+                  active
+                    ? 'border-border bg-surface-raised text-text before:absolute before:top-1/2 before:-left-[13px] before:hidden before:h-4 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-amber md:before:block'
+                    : 'border-transparent text-text-muted hover:bg-surface hover:text-text'
+                }`}
+              >
+                {item.icon}
+                {item.label}
+                <span
+                  className={`ml-auto h-[5px] w-[5px] flex-none rounded-full ${
+                    active ? 'bg-teal shadow-[0_0_6px_#56e6c9]' : 'bg-text-dim'
                   }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+                />
+              </button>
+            )
+          })}
+        </nav>
+      </aside>
 
-            {outputTab === 'mikrotik-server' && (
-              <OutputPanel
-                title="MikroTik Server (RouterOS) Komutları"
-                text={mikrotikServerConfig(result.settings, result.keys, result.clients)}
-                filename="mikrotik-server.rsc"
-              />
-            )}
-
-            {outputTab !== 'mikrotik-server' && (
-              <div className="mt-5 flex flex-wrap items-center gap-2">
-                <span className="text-sm text-slate-400">Client seç:</span>
-                {result.clients.map((c, i) => (
-                  <button
-                    key={c.name}
-                    onClick={() => setActiveClientIndex(i)}
-                    className={`rounded-md px-3 py-1.5 text-sm transition ${
-                      activeClientIndex === i
-                        ? 'bg-emerald-500 text-emerald-950'
-                        : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {c.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {outputTab === 'mikrotik-client' && (
-              <OutputPanel
-                title={`MikroTik Client (RouterOS) — ${result.clients[activeClientIndex].name}`}
-                text={mikrotikClientConfig(
-                  result.settings,
-                  result.keys,
-                  result.clients[activeClientIndex],
-                )}
-                filename={`mikrotik-${result.clients[activeClientIndex].name}.rsc`}
-              />
-            )}
-
-            {outputTab === 'client-conf' && (
-              <ClientConfPanel
-                title={`Windows / Mobil Client — ${result.clients[activeClientIndex].name}`}
-                text={wgQuickClientConfig(
-                  result.settings,
-                  result.keys,
-                  result.clients[activeClientIndex],
-                )}
-                filename={`${result.clients[activeClientIndex].name}.conf`}
-              />
-            )}
-          </div>
-        )}
-
-        <h2 className="mt-16 text-center text-2xl font-semibold text-slate-100">
-          LogiSafe Çözümleri
-        </h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {partnerLinks.map((p) => (
-            <div
-              key={p.name}
-              className="rounded-xl border border-white/10 bg-[#0d1018] p-5"
-            >
-              <p className="font-semibold text-blue-400">{p.name}</p>
-              <p className="mt-2 text-sm text-slate-400">{p.description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function OutputPanel({
-  title,
-  text,
-  filename,
-}: {
-  title: string
-  text: string
-  filename: string
-}) {
-  return (
-    <div className="mt-5">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-slate-300">{title}</h3>
-        <div className="flex gap-2">
-          <CopyButton text={text} />
-          <DownloadButton text={text} filename={filename} />
-        </div>
-      </div>
-      <pre className="mt-3 max-h-[420px] overflow-auto rounded-lg border border-white/10 bg-[#11141c] p-4 text-left text-sm text-emerald-300">
-        {text}
-      </pre>
-    </div>
-  )
-}
-
-function ClientConfPanel({
-  title,
-  text,
-  filename,
-}: {
-  title: string
-  text: string
-  filename: string
-}) {
-  return (
-    <div className="mt-5 grid gap-6 sm:grid-cols-[1fr_auto]">
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-medium text-slate-300">{title}</h3>
-          <div className="flex gap-2">
-            <CopyButton text={text} />
-            <DownloadButton text={text} filename={filename} />
-          </div>
-        </div>
-        <pre className="mt-3 max-h-[420px] overflow-auto rounded-lg border border-white/10 bg-[#11141c] p-4 text-left text-sm text-emerald-300">
-          {text}
-        </pre>
-      </div>
-      <div className="flex flex-col items-center gap-2 justify-self-center">
-        <QrCode text={text} />
-        <span className="text-xs text-slate-500">WireGuard mobil app ile tara</span>
-      </div>
+      <main className="min-w-0 px-5 py-8 md:px-11 md:py-10">
+        {view === 'wg' && <WireGuardView />}
+        {view === 'ipcalc' && <IpCalcView />}
+        {view === 'cgnat' && <CgnatView />}
+      </main>
     </div>
   )
 }

@@ -18,7 +18,7 @@ export function DownloadButton({
   return (
     <button
       onClick={handleDownload}
-      className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-white/10"
+      className="rounded-[3px] border border-border px-2.5 py-[5px] font-mono text-[11px] text-text-muted transition hover:border-text-dim hover:text-text"
     >
       İndir
     </button>

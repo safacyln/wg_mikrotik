@@ -8,12 +8,12 @@ export function Field({
   children: ReactNode
 }) {
   return (
-    <label className="flex flex-col gap-2 text-left">
-      <span className="text-sm text-slate-300">{label}</span>
+    <label className="flex flex-col gap-[7px] text-left">
+      <span className="text-[12.5px] font-medium text-text-muted">{label}</span>
       {children}
     </label>
   )
 }
 
 export const inputClass =
-  'w-full rounded-lg border border-white/10 bg-[#11141c] px-4 py-2.5 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30'
+  'w-full rounded-[3px] border border-border bg-bg px-3 py-2.5 font-mono text-[13.5px] text-text outline-none transition placeholder:text-text-dim focus:border-teal focus:shadow-[0_0_0_3px_rgba(86,230,201,0.12)]'

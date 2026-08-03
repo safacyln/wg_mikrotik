@@ -1,14 +1,142 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  --color-bg: #0a0d13;
+  --color-bg-grid: #0d111a;
+  --color-surface: #12161f;
+  --color-surface-raised: #161b26;
+  --color-border: #232838;
+  --color-border-soft: #1a1f2b;
+  --color-text: #e7e9f0;
+  --color-text-muted: #838ca3;
+  --color-text-dim: #545c72;
+  --color-amber: #ff8a3d;
+  --color-amber-dim: #7a4a26;
+  --color-teal: #56e6c9;
+  --color-teal-dim: #1e4a44;
+  --color-danger: #ff6b6b;
+}
+
 body {
   margin: 0;
-  background: #0a0e14;
-  color: #cbd5e1;
-  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255, 138, 61, 0.05), transparent),
+    repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(255, 255, 255, 0.014) 40px),
+    repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(255, 255, 255, 0.014) 40px),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+::selection {
+  background: var(--color-teal-dim);
+  color: var(--color-teal);
 }
 
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.rack-rail::before,
+.rack-rail::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background-image: radial-gradient(circle, var(--color-border) 1.4px, transparent 1.6px);
+  background-size: 14px 10px;
+  background-position: 10px center;
+  opacity: 0.55;
+}
+.rack-rail::before {
+  top: 0;
+}
+.rack-rail::after {
+  bottom: 0;
+}
+@media (max-width: 860px) {
+  .rack-rail::before,
+  .rack-rail::after {
+    display: none;
+  }
+}
+
+.rack-card {
+  position: relative;
+  padding-left: 34px;
+}
+.rack-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 14px;
+  background-image: radial-gradient(circle, var(--color-border) 1.6px, transparent 1.8px);
+  background-size: 100% 22px;
+  background-position: center top;
+  border-right: 1px solid var(--color-border-soft);
+}
+
+.term-body {
+  max-height: 420px;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.term-lines {
+  padding: 14px 12px;
+  text-align: right;
+  color: var(--color-text-dim);
+  user-select: none;
+  border-right: 1px solid var(--color-border-soft);
+}
+.term-code {
+  padding: 14px 18px;
+  color: var(--color-teal);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--color-amber);
+  border-radius: 2px;
+  position: relative;
+}
+.brand-mark::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  background: var(--color-amber);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
 }

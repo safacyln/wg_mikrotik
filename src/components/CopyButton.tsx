@@ -12,9 +12,13 @@ export function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-white/10"
+      className={`rounded-[3px] border px-2.5 py-[5px] font-mono text-[11px] transition ${
+        copied
+          ? 'border-teal-dim text-teal'
+          : 'border-border text-text-muted hover:border-teal-dim hover:text-teal'
+      }`}
     >
-      {copied ? 'Kopyalandı' : 'Kopyala'}
+      {copied ? 'Kopyalandı ✓' : 'Kopyala'}
     </button>
   )
 }
