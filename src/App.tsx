@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react'
 import { WireGuardView } from './views/WireGuardView'
 import { IpCalcView } from './views/IpCalcView'
 import { CgnatView } from './views/CgnatView'
+import { RtbhView } from './views/RtbhView'
 
-type View = 'wg' | 'ipcalc' | 'cgnat'
+type View = 'wg' | 'ipcalc' | 'cgnat' | 'rtbh'
 
 const pageTitles: Record<View, string> = {
   wg: 'WireGuard Config Generator (MikroTik) - LogiSafe Araçları',
   ipcalc: 'IP Adresi ve Subnet Hesaplayıcı - LogiSafe Araçları',
   cgnat: 'CGNAT Netmap / RADIUS Üretici - LogiSafe Araçları',
+  rtbh: 'BGP RTBH Community Cheat Sheet (Türkiye) - LogiSafe Araçları',
 }
 
 const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
@@ -43,6 +45,17 @@ const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
         <circle cx="19" cy="5" r="2.2" />
         <circle cx="19" cy="19" r="2.2" />
         <path d="M7 11l10-5M7 13l10 5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'rtbh',
+    label: 'RTBH Community',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4 flex-none opacity-85">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3.5 2" />
+        <path d="m5 5 2.5 2.5M19 5l-2.5 2.5" />
       </svg>
     ),
   },
@@ -103,6 +116,7 @@ export default function App() {
         {view === 'wg' && <WireGuardView />}
         {view === 'ipcalc' && <IpCalcView />}
         {view === 'cgnat' && <CgnatView />}
+        {view === 'rtbh' && <RtbhView />}
       </main>
     </div>
   )
