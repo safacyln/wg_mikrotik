@@ -99,7 +99,7 @@ export function planCgnat(input: CgnatPlanInput): CgnatPlanResult {
 
   const privatePool = parseFullCidr(input.privateCidr)
   if (!privatePool) {
-    return { ok: false, error: "Abone havuzu geçersiz. Örnek: 100.48.15.0/24" }
+    return { ok: false, error: "Abone havuzu geçersiz. Örnek: 100.64.15.0/24" }
   }
   const { start: privateStart, total: privateTotal } = privatePool
 

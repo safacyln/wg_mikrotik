@@ -28,7 +28,7 @@ export function IpCalcView() {
     if (!result) {
       setInfo(null)
       setSplit(null)
-      setError('Geçersiz IP adresi veya netmask. Örn: 217.177.0.0 ve 29')
+      setError('Geçersiz IP adresi veya netmask. Örn: 203.0.113.0 ve 29')
       return
     }
     setError('')
@@ -90,15 +90,15 @@ export function IpCalcView() {
           <Field label="Host / IP Adresi">
             <input
               className={inputClass}
-              placeholder="örn. 217.177.0.0"
+              placeholder="örn. 203.0.113.0"
               value={host}
               onChange={(e) => setHost(e.target.value)}
             />
           </Field>
-          <Field label="Netmask (CIDR /29, 29 veya 255.255.255.248)">
+          <Field label="Netmask (prefix veya maske)">
             <input
               className={inputClass}
-              placeholder="örn. 29"
+              placeholder="örn. 29 veya 255.255.255.248"
               value={mask}
               onChange={(e) => setMask(e.target.value)}
             />

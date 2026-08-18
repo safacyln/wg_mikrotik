@@ -9,7 +9,9 @@ export function Field({
 }) {
   return (
     <label className="flex flex-col gap-[7px] text-left">
-      <span className="text-[12.5px] font-medium text-text-muted">{label}</span>
+      <span className="flex min-h-[32px] items-end text-[12.5px] font-medium text-text-muted">
+        {label}
+      </span>
       {children}
     </label>
   )

@@ -64,7 +64,7 @@ export function CgnatView() {
           <Field label="Public Havuz Başlangıç IP">
             <input
               className={inputClass}
-              placeholder="örn. 217.177.0.96"
+              placeholder="örn. 203.0.113.96"
               value={publicStartIp}
               onChange={(e) => setPublicStartIp(e.target.value)}
             />
@@ -81,7 +81,7 @@ export function CgnatView() {
           <Field label="Abone (Private) Havuzu">
             <input
               className={inputClass}
-              placeholder="örn. 100.48.15.0/24"
+              placeholder="örn. 100.64.15.0/24"
               value={privateCidr}
               onChange={(e) => setPrivateCidr(e.target.value)}
             />
