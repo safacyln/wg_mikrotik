@@ -1,93 +1,111 @@
 import { useState } from 'react'
 import { Field, inputClass } from '../components/Field'
 import { RackCardHeader } from '../components/RackCardHeader'
-import { TermOutput } from '../components/TermOutput'
+import { PlainOutput } from '../components/PlainOutput'
 import { VerdictCard } from '../components/VerdictCard'
 import { CrossStrip } from '../components/CrossStrip'
-import {
-  calculateCgnatCapacity,
-  generateCgnatNetmap,
-  type CgnatCapacityResult,
-} from '../lib/cgnat'
+import { planCgnat, type CgnatPlan } from '../lib/cgnat'
 
 export function CgnatView() {
-  const [iface, setIface] = useState('vlan_2756')
-  const [comment, setComment] = useState('cgnat')
-  const [publicCidr, setPublicCidr] = useState('217.177.0.96/28')
-  const [privateCidr, setPrivateCidr] = useState('100.64.0.0/24')
+  const [publicStartIp, setPublicStartIp] = useState('217.177.0.96')
+  const [publicTotal, setPublicTotal] = useState(32)
+  const [privateStartIp, setPrivateStartIp] = useState('100.48.15.0')
+  const [privateTotal, setPrivateTotal] = useState(344)
+  const [groupPrefix, setGroupPrefix] = useState(29)
   const [startPort, setStartPort] = useState(1000)
-  const [portWidth, setPortWidth] = useState(200)
+  const [portWidth, setPortWidth] = useState(1500)
+  const [iface, setIface] = useState('vlan_2756')
+  const [comment, setComment] = useState('newcgnat')
+  const [includeIcmp, setIncludeIcmp] = useState(true)
 
   const [error, setError] = useState('')
-  const [result, setResult] = useState<CgnatCapacityResult | null>(null)
-  const [output, setOutput] = useState('')
+  const [result, setResult] = useState<CgnatPlan | null>(null)
 
-  function handleCalculate() {
-    const capacity = calculateCgnatCapacity({
-      publicCidr: publicCidr.trim(),
-      privateCidr: privateCidr.trim(),
+  function handlePlan() {
+    const outcome = planCgnat({
+      publicStartIp: publicStartIp.trim(),
+      publicTotal,
+      privateStartIp: privateStartIp.trim(),
+      privateTotal,
+      groupPrefix,
       startPort,
       portWidth,
+      iface: iface.trim() || 'vlan_1',
+      comment: comment.trim() || 'cgnat',
+      includeIcmp,
     })
 
-    if (!capacity) {
+    if (!outcome.ok) {
+      setError(outcome.error)
       setResult(null)
-      setOutput('')
-      setError(
-        'Geçerli bir Public CIDR, Private CIDR, başlangıç portu ve port genişliği girin (örn. 217.177.0.96/28).',
-      )
       return
     }
     setError('')
-    setResult(capacity)
-
-    if (capacity.fits) {
-      const netmap = generateCgnatNetmap({
-        iface: iface.trim() || 'vlan_1',
-        comment: comment.trim() || 'cgnat',
-        publicCidr: publicCidr.trim(),
-        privateCidr: privateCidr.trim(),
-      })
-      setOutput(netmap ?? '')
-    } else {
-      setOutput('')
-    }
+    setResult(outcome.plan)
   }
+
+  const groupSizeLabel = Math.pow(2, 32 - groupPrefix)
 
   return (
     <>
       <div className="mb-[30px] max-w-[640px]">
         <p className="mb-2.5 flex items-center gap-2 font-mono text-[11px] tracking-widest text-amber uppercase before:h-px before:w-4 before:bg-amber before:opacity-60">
-          Kapasite Hesabı + Netmap
+          Toplu Netmap + RADIUS Üretici
         </p>
         <h1 className="mb-2.5 text-[27px] font-semibold tracking-tight text-text">
-          CGNAT Kapasite Hesaplayıcı ve Netmap Üretici
+          CGNAT Toplu Netmap ve RADIUS Dışa Aktarım
         </h1>
         <p className="text-[14.5px] leading-relaxed text-text-muted">
-          Public IP bloğunuza abonelere ayıracağınız private subnet ile başlangıç portu ve abone
-          başına port genişliğini girin — bu public blok kaç aboneye yeteceğini hesaplayıp,
-          sığıyorsa doğrudan MikroTik netmap kuralını üretir.
+          Public havuzunuzu ve abonelere ayrılan private havuzu grup grup (ör. /29) port
+          dilimleyerek eşleştirir. Kaç abonenin sığdığını hesaplar, sığan kısım için MikroTik
+          netmap kurallarını ve RADIUS firmasına verilecek IP↔port eşleme dosyasını üretir.
         </p>
       </div>
 
       <div className="rack-card mb-[22px] rounded-[3px] border border-border bg-surface py-[26px] pr-7">
-        <RackCardHeader unitTag="1U — Public / Private Bloklar" ready={!!result} readyLabel="hesaplandı" />
+        <RackCardHeader unitTag="1U — Havuzlar" ready={!!result} readyLabel="planlandı" />
 
         <div className="grid grid-cols-1 gap-x-[22px] gap-y-[18px] sm:grid-cols-2">
-          <Field label="Public CIDR (firmanın elindeki blok)">
+          <Field label="Public Havuz Başlangıç IP">
             <input
               className={inputClass}
-              placeholder="örn. 217.177.0.96/28"
-              value={publicCidr}
-              onChange={(e) => setPublicCidr(e.target.value)}
+              placeholder="örn. 217.177.0.96"
+              value={publicStartIp}
+              onChange={(e) => setPublicStartIp(e.target.value)}
             />
           </Field>
-          <Field label="Private CIDR (abonelere ayrılan subnet)">
+          <Field label="Public Havuz Toplam IP Sayısı">
+            <input
+              type="number"
+              className={inputClass}
+              value={publicTotal}
+              onChange={(e) => setPublicTotal(Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Abone (Private) Havuz Başlangıç IP">
             <input
               className={inputClass}
-              placeholder="örn. 100.64.0.0/24"
-              value={privateCidr}
-              onChange={(e) => setPrivateCidr(e.target.value)}
+              placeholder="örn. 100.48.15.0"
+              value={privateStartIp}
+              onChange={(e) => setPrivateStartIp(e.target.value)}
+            />
+          </Field>
+          <Field label="Abone Havuzu Toplam Host Sayısı">
+            <input
+              type="number"
+              className={inputClass}
+              value={privateTotal}
+              onChange={(e) => setPrivateTotal(Number(e.target.value))}
+            />
+          </Field>
+          <Field label={`Grup Boyutu (prefix — /${groupPrefix} = ${groupSizeLabel} IP'lik gruplar)`}>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              className={inputClass}
+              value={groupPrefix}
+              onChange={(e) => setGroupPrefix(Number(e.target.value))}
             />
           </Field>
           <Field label="Başlangıç Portu">
@@ -98,7 +116,7 @@ export function CgnatView() {
               onChange={(e) => setStartPort(Number(e.target.value))}
             />
           </Field>
-          <Field label="Abone Başına Port Genişliği">
+          <Field label="Grup Başına Port Genişliği">
             <input
               type="number"
               className={inputClass}
@@ -114,6 +132,16 @@ export function CgnatView() {
           </Field>
         </div>
 
+        <label className="mt-4 flex items-center gap-[9px] text-[13px] text-text-muted">
+          <input
+            type="checkbox"
+            checked={includeIcmp}
+            onChange={(e) => setIncludeIcmp(e.target.checked)}
+            className="h-[15px] w-[15px] accent-amber"
+          />
+          ICMP netmap kuralı da eklensin (port kısıtlaması olmadan)
+        </label>
+
         {error && (
           <p className="mt-4 rounded-[3px] border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
             {error}
@@ -122,14 +150,13 @@ export function CgnatView() {
 
         <div className="mt-[22px] flex justify-end gap-2.5">
           <button
-            onClick={handleCalculate}
+            onClick={handlePlan}
             className="inline-flex items-center gap-2.5 rounded-[3px] bg-amber px-5 py-[11px] text-[13.5px] font-semibold text-[#17110a] transition hover:shadow-[0_0_0_3px_rgba(255,138,61,0.18)] active:translate-y-px"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <rect x="4" y="4" width="16" height="16" rx="2" />
-              <path d="M8 9h8M8 13h8M8 17h4" />
+              <path d="M13 2 4 14h6l-1 8 9-12h-6z" />
             </svg>
-            Hesapla
+            Planla ve Üret
           </button>
         </div>
       </div>
@@ -140,28 +167,38 @@ export function CgnatView() {
             positive={result.fits}
             title={
               result.fits
-                ? `Sığar — bu public blok ${result.totalCapacity} aboneye kadar yeter`
-                : `Sığmaz — bu public blok en fazla ${result.totalCapacity} aboneye yeter`
+                ? `Tamamı sığıyor — ${result.assignedHostCount} abonenin tamamı bu public havuza yerleşti`
+                : `Kısmen sığıyor — ${result.assignedHostCount} / ${result.neededHosts} abone yerleşti, ${result.unassignedHostCount} abone için havuz yetersiz`
             }
             subtitle={
               <>
-                {result.publicNetwork}/{result.publicPrefix} → {result.publicUsableIps} kullanılabilir
-                public IP × abone başına {result.portsPerIp} port = {result.totalCapacity} abone
-                kapasitesi. {result.privateNetwork}/{result.privatePrefix} bloğunda {result.neededSubscribers}{' '}
-                abone var.
-                {!result.fits && result.suggestedPublicPrefix !== null && (
+                {result.publicGroupCount} public grup (/{groupPrefix}) × grup başına{' '}
+                {result.slicesPerPublicGroup} port dilimi = {result.capacityGroups} grup ={' '}
+                {result.capacityHosts} abone kapasitesi. Abone havuzunda {result.privateGroupCount}{' '}
+                grup ({result.neededHosts} host) var.
+                {!result.fits && (
                   <>
                     {' '}
-                    Öneri: en az bir /{result.suggestedPublicPrefix} public blok kullanın.
+                    Kalan {result.unassignedGroupCount} grubu (
+                    {result.unassignedHostCount} abone) yerleştirmek için public havuzu
+                    büyütün veya port genişliğini azaltın.
                   </>
                 )}
               </>
             }
           />
 
-          {result.fits && output && (
-            <TermOutput prompt="/ip/firewall/nat export" text={output} filename="cgnat-netmap.rsc" />
-          )}
+          <PlainOutput
+            prompt="/ip/firewall/nat export (MikroTik'e yapıştırın)"
+            text={result.mikrotikConfig}
+            filename="cgnat-netmap.rsc"
+          />
+
+          <PlainOutput
+            prompt={`RADIUS IP↔port eşleme — ${result.radiusLineCount} satır (RADIUS firmasına verilecek)`}
+            text={result.radiusExport}
+            filename="cgnat-radius-export.txt"
+          />
         </>
       )}
 
