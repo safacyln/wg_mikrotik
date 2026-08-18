@@ -9,13 +9,11 @@ import { planCgnat, type CgnatPlan } from '../lib/cgnat'
 export function CgnatView() {
   const [publicStartIp, setPublicStartIp] = useState('217.177.0.96')
   const [publicTotal, setPublicTotal] = useState(32)
-  const [privateStartIp, setPrivateStartIp] = useState('100.48.15.0')
-  const [privateTotal, setPrivateTotal] = useState(344)
-  const [groupPrefix, setGroupPrefix] = useState(29)
+  const [privateCidr, setPrivateCidr] = useState('100.48.15.0/24')
   const [startPort, setStartPort] = useState(1000)
   const [portWidth, setPortWidth] = useState(1500)
   const [iface, setIface] = useState('vlan_2756')
-  const [comment, setComment] = useState('newcgnat')
+  const [comment, setComment] = useState('LogiSafe CGNAT')
   const [includeIcmp, setIncludeIcmp] = useState(true)
 
   const [error, setError] = useState('')
@@ -25,13 +23,11 @@ export function CgnatView() {
     const outcome = planCgnat({
       publicStartIp: publicStartIp.trim(),
       publicTotal,
-      privateStartIp: privateStartIp.trim(),
-      privateTotal,
-      groupPrefix,
+      privateCidr: privateCidr.trim(),
       startPort,
       portWidth,
       iface: iface.trim() || 'vlan_1',
-      comment: comment.trim() || 'cgnat',
+      comment: comment.trim() || 'LogiSafe CGNAT',
       includeIcmp,
     })
 
@@ -44,8 +40,6 @@ export function CgnatView() {
     setResult(outcome.plan)
   }
 
-  const groupSizeLabel = Math.pow(2, 32 - groupPrefix)
-
   return (
     <>
       <div className="mb-[30px] max-w-[640px]">
@@ -56,9 +50,10 @@ export function CgnatView() {
           CGNAT Toplu Netmap ve RADIUS Dışa Aktarım
         </h1>
         <p className="text-[14.5px] leading-relaxed text-text-muted">
-          Public havuzunuzu ve abonelere ayrılan private havuzu grup grup (ör. /29) port
-          dilimleyerek eşleştirir. Kaç abonenin sığdığını hesaplar, sığan kısım için MikroTik
-          netmap kurallarını ve RADIUS firmasına verilecek IP↔port eşleme dosyasını üretir.
+          Public havuzunuzu ve abonelere ayrılan private havuzu otomatik olarak gruplara bölüp
+          port dilimleyerek eşleştirir. Kaç abonenin sığdığını hesaplar, sığan kısım için
+          MikroTik netmap kurallarını ve RADIUS firmasına verilecek IP↔port eşleme dosyasını
+          üretir.
         </p>
       </div>
 
@@ -82,30 +77,12 @@ export function CgnatView() {
               onChange={(e) => setPublicTotal(Number(e.target.value))}
             />
           </Field>
-          <Field label="Abone (Private) Havuz Başlangıç IP">
+          <Field label="Abone (Private) Havuzu">
             <input
               className={inputClass}
-              placeholder="örn. 100.48.15.0"
-              value={privateStartIp}
-              onChange={(e) => setPrivateStartIp(e.target.value)}
-            />
-          </Field>
-          <Field label="Abone Havuzu Toplam Host Sayısı">
-            <input
-              type="number"
-              className={inputClass}
-              value={privateTotal}
-              onChange={(e) => setPrivateTotal(Number(e.target.value))}
-            />
-          </Field>
-          <Field label={`Grup Boyutu (prefix — /${groupPrefix} = ${groupSizeLabel} IP'lik gruplar)`}>
-            <input
-              type="number"
-              min={1}
-              max={31}
-              className={inputClass}
-              value={groupPrefix}
-              onChange={(e) => setGroupPrefix(Number(e.target.value))}
+              placeholder="örn. 100.48.15.0/24"
+              value={privateCidr}
+              onChange={(e) => setPrivateCidr(e.target.value)}
             />
           </Field>
           <Field label="Başlangıç Portu">
@@ -116,7 +93,7 @@ export function CgnatView() {
               onChange={(e) => setStartPort(Number(e.target.value))}
             />
           </Field>
-          <Field label="Grup Başına Port Genişliği">
+          <Field label="Abone Başına Port Genişliği">
             <input
               type="number"
               className={inputClass}
@@ -172,7 +149,7 @@ export function CgnatView() {
             }
             subtitle={
               <>
-                {result.publicGroupCount} public grup (/{groupPrefix}) × grup başına{' '}
+                {result.publicGroupCount} public grup (/{result.groupPrefix}) × grup başına{' '}
                 {result.slicesPerPublicGroup} port dilimi = {result.capacityGroups} grup ={' '}
                 {result.capacityHosts} abone kapasitesi. Abone havuzunda {result.privateGroupCount}{' '}
                 grup ({result.neededHosts} host) var.
