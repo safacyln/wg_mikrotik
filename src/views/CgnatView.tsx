@@ -7,9 +7,9 @@ import { CrossStrip } from '../components/CrossStrip'
 import { planCgnat, type CgnatPlan } from '../lib/cgnat'
 
 export function CgnatView() {
-  const [publicStartIp, setPublicStartIp] = useState('217.177.0.96')
-  const [publicTotal, setPublicTotal] = useState(32)
-  const [privateCidr, setPrivateCidr] = useState('100.48.15.0/24')
+  const [publicStartIp, setPublicStartIp] = useState('')
+  const [publicTotal, setPublicTotal] = useState('')
+  const [privateCidr, setPrivateCidr] = useState('')
   const [startPort, setStartPort] = useState(1000)
   const [portWidth, setPortWidth] = useState(1500)
   const [iface, setIface] = useState('vlan_2756')
@@ -22,7 +22,7 @@ export function CgnatView() {
   function handlePlan() {
     const outcome = planCgnat({
       publicStartIp: publicStartIp.trim(),
-      publicTotal,
+      publicTotal: Number(publicTotal),
       privateCidr: privateCidr.trim(),
       startPort,
       portWidth,
@@ -73,8 +73,9 @@ export function CgnatView() {
             <input
               type="number"
               className={inputClass}
+              placeholder="örn. 32"
               value={publicTotal}
-              onChange={(e) => setPublicTotal(Number(e.target.value))}
+              onChange={(e) => setPublicTotal(e.target.value)}
             />
           </Field>
           <Field label="Abone (Private) Havuzu">
