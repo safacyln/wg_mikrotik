@@ -1,18 +1,23 @@
-import { int2ip, subnetInfo } from './ip'
+import { subnetInfo } from './ip'
 
-export interface CgnatBlock {
+export interface CgnatCapacityInput {
   publicCidr: string
   privateCidr: string
   startPort: number
   portWidth: number
 }
 
-export interface CgnatSettings {
-  iface: string
-  comment: string
-  useUdp: boolean
-  useTcp: boolean
-  useIcmp: boolean
+export interface CgnatCapacityResult {
+  publicPrefix: number
+  publicNetwork: string
+  publicUsableIps: number
+  privatePrefix: number
+  privateNetwork: string
+  neededSubscribers: number
+  portsPerIp: number
+  totalCapacity: number
+  fits: boolean
+  suggestedPublicPrefix: number | null
 }
 
 function parseCidr(input: string) {
@@ -22,55 +27,64 @@ function parseCidr(input: string) {
   return subnetInfo(ip, prefix)
 }
 
-export function generateCgnatConfig(
-  settings: CgnatSettings,
-  blocks: CgnatBlock[],
-): string | null {
-  const parsedBlocks = blocks.map((b) => ({
-    ...b,
-    pub: parseCidr(b.publicCidr),
-    priv: parseCidr(b.privateCidr),
-  }))
+/** En dar (en yüksek prefix) public bloğu bulur; verilen abone sayısını karşılayacak IP sayısını sağlar. */
+function findSuggestedPublicPrefix(requiredIps: number): number | null {
+  for (let prefix = 32; prefix >= 0; prefix--) {
+    const usable = prefix >= 31 ? Math.pow(2, 32 - prefix) : Math.pow(2, 32 - prefix) - 2
+    if (usable >= requiredIps) return prefix
+  }
+  return null
+}
 
-  if (parsedBlocks.length === 0 || parsedBlocks.some((b) => !b.pub || !b.priv)) {
+export function calculateCgnatCapacity(input: CgnatCapacityInput): CgnatCapacityResult | null {
+  const pub = parseCidr(input.publicCidr)
+  const priv = parseCidr(input.privateCidr)
+  if (!pub || !priv || input.startPort < 1 || input.startPort > 65535 || input.portWidth < 1) {
     return null
   }
 
-  let out = ''
-  let radius = ''
+  const portsPerIp = Math.max(1, Math.floor((65535 - input.startPort + 1) / input.portWidth))
+  const publicUsableIps = pub.usable > 0 ? pub.usable : pub.total
+  const neededSubscribers = priv.usable > 0 ? priv.usable : priv.total
+  const totalCapacity = publicUsableIps * portsPerIp
+  const fits = totalCapacity >= neededSubscribers
 
-  parsedBlocks.forEach((block, idx) => {
-    const { pub, priv, publicCidr, privateCidr, startPort, portWidth } = block
-    if (!pub || !priv) return
-    const tag = `${settings.comment}-${idx + 1}`
-    const endPort = startPort + portWidth - 1
+  const requiredIps = Math.ceil(neededSubscribers / portsPerIp)
+  const suggestedPublicPrefix = fits ? null : findSuggestedPublicPrefix(requiredIps)
 
-    out += `\n# --- Blok ${idx + 1}: ${publicCidr} <-> ${privateCidr} ---\n`
-    out += `/ip firewall nat\n`
-    out += `add chain=srcnat action=netmap src-address=${privateCidr} to-addresses=${pub.network} out-interface=${settings.iface} comment="${tag}"\n`
-    out += `add chain=dstnat action=netmap dst-address=${publicCidr} to-addresses=${priv.network} in-interface=${settings.iface} comment="${tag}"\n`
+  return {
+    publicPrefix: pub.prefix,
+    publicNetwork: pub.network,
+    publicUsableIps,
+    privatePrefix: priv.prefix,
+    privateNetwork: priv.network,
+    neededSubscribers,
+    portsPerIp,
+    totalCapacity,
+    fits,
+    suggestedPublicPrefix,
+  }
+}
 
-    if (settings.useTcp) {
-      out += `add chain=srcnat action=netmap protocol=tcp src-address=${privateCidr} dst-port=${startPort}-${endPort} to-addresses=${pub.network} out-interface=${settings.iface} comment="${tag}-tcp"\n`
-    }
-    if (settings.useUdp) {
-      out += `add chain=srcnat action=netmap protocol=udp src-address=${privateCidr} dst-port=${startPort}-${endPort} to-addresses=${pub.network} out-interface=${settings.iface} comment="${tag}-udp"\n`
-    }
-    if (settings.useIcmp) {
-      out += `add chain=srcnat action=netmap protocol=icmp src-address=${privateCidr} to-addresses=${pub.network} out-interface=${settings.iface} comment="${tag}-icmp"\n`
-    }
+export interface CgnatNetmapInput {
+  iface: string
+  comment: string
+  publicCidr: string
+  privateCidr: string
+}
 
-    const hostCount = priv.usable > 0 ? priv.usable : priv.total
-    const slice = Math.floor(portWidth / hostCount) || 1
-    radius += `\n# ${privateCidr} -> port aralığı paylaşımı (${hostCount} host)\n`
-    for (let h = 0; h < hostCount; h++) {
-      const hostIp = int2ip(priv.networkInt + (priv.usable > 0 ? 1 : 0) + h)
-      const s = startPort + h * slice
-      const e = Math.min(s + slice - 1, endPort)
-      radius += `${hostIp}\tCisco-AVPair = "cgnat:port-range=${s}-${e}"\n`
-    }
-  })
+export function generateCgnatNetmap(input: CgnatNetmapInput): string | null {
+  const pub = parseCidr(input.publicCidr)
+  const priv = parseCidr(input.privateCidr)
+  if (!pub || !priv) return null
 
-  out += `\n\n# --- RADIUS port-eşleme (Cisco-AVPair, örnek format) ---\n${radius}`
-  return out.trim()
+  const lines: string[] = []
+  lines.push('/ip firewall nat')
+  lines.push(
+    `add chain=srcnat action=netmap src-address=${input.privateCidr} to-addresses=${pub.network} out-interface=${input.iface} comment="${input.comment}"`,
+  )
+  lines.push(
+    `add chain=dstnat action=netmap dst-address=${input.publicCidr} to-addresses=${priv.network} in-interface=${input.iface} comment="${input.comment}"`,
+  )
+  return lines.join('\n')
 }

@@ -9,7 +9,7 @@ type View = 'wg' | 'ipcalc' | 'cgnat' | 'rtbh'
 const pageTitles: Record<View, string> = {
   wg: 'WireGuard Config Generator (MikroTik) - LogiSafe Araçları',
   ipcalc: 'IP Adresi ve Subnet Hesaplayıcı - LogiSafe Araçları',
-  cgnat: 'CGNAT Netmap / RADIUS Üretici - LogiSafe Araçları',
+  cgnat: 'CGNAT Kapasite Hesaplayıcı ve Netmap Üretici - LogiSafe Araçları',
   rtbh: 'BGP RTBH Community Cheat Sheet (Türkiye) - LogiSafe Araçları',
 }
 
@@ -38,7 +38,7 @@ const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'cgnat',
-    label: 'CGNAT / RADIUS',
+    label: 'CGNAT Kapasite / Netmap',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4 flex-none opacity-85">
         <circle cx="5" cy="12" r="2.2" />
