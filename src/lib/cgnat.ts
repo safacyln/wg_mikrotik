@@ -39,6 +39,12 @@ function parseFullCidr(cidr: string): { start: number; total: number; prefix: nu
   return { start: (n & mask) >>> 0, total: Math.pow(2, 32 - prefix), prefix }
 }
 
+/** RouterOS boşluk içeren değerleri tırnaksız kabul etmez. */
+function formatCommentToken(comment: string): string {
+  const escaped = comment.replace(/"/g, '\\"')
+  return /\s/.test(comment) ? `comment="${escaped}"` : `comment=${escaped}`
+}
+
 function formatRouterosAdd(tokens: string[], width = 78): string {
   const lines: string[] = []
   let current = 'add'
@@ -128,7 +134,7 @@ export function planCgnat(input: CgnatPlanInput): CgnatPlanResult {
         formatRouterosAdd([
           'action=netmap',
           'chain=srcnat',
-          `comment=${input.comment}`,
+          formatCommentToken(input.comment),
           `out-interface=${input.iface}`,
           `protocol=${protocol}`,
           `src-address=${privateGroupCidr}`,
@@ -142,7 +148,7 @@ export function planCgnat(input: CgnatPlanInput): CgnatPlanResult {
         formatRouterosAdd([
           'action=netmap',
           'chain=srcnat',
-          `comment=${input.comment}`,
+          formatCommentToken(input.comment),
           `out-interface=${input.iface}`,
           'protocol=icmp',
           `src-address=${privateGroupCidr}`,
