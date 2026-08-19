@@ -1,8 +1,7 @@
-import { ip2int, int2ip, maskFromPrefix, isValidIPv4 } from './ip'
+import { ip2int, int2ip, maskFromPrefix } from './ip'
 
 export interface CgnatPlanInput {
-  publicStartIp: string
-  publicTotal: number
+  publicCidr: string
   privateCidr: string
   startPort: number
   portWidth: number
@@ -12,19 +11,15 @@ export interface CgnatPlanInput {
 }
 
 export interface CgnatPlan {
-  groupPrefix: number
+  publicPrefix: number
+  publicNetwork: string
   groupSize: number
-  publicGroupCount: number
-  privateGroupCount: number
   slicesPerPublicGroup: number
-  capacityGroups: number
   capacityHosts: number
-  neededHosts: number
-  assignedGroupCount: number
-  assignedHostCount: number
-  unassignedGroupCount: number
-  unassignedHostCount: number
-  fits: boolean
+  privateFamilyPrefix: number
+  firstPrivateFamilyNetwork: string
+  lastPrivateFamilyNetwork: string
+  familyBlocksUsed: number
   mikrotikConfig: string
   radiusExport: string
   radiusLineCount: number
@@ -34,32 +29,14 @@ export type CgnatPlanResult = { ok: true; plan: CgnatPlan } | { ok: false; error
 
 const MAX_PORT = 65535
 const MAX_HOSTS = 50000
-/** Denenecek grup boyutu (prefix) sırası — /29 (8'li) sektör standardıdır, uymazsa küçültülür. */
-const GROUP_PREFIX_CANDIDATES = [29, 30, 31, 32]
 
-function parseFullCidr(cidr: string): { start: number; total: number } | null {
+function parseFullCidr(cidr: string): { start: number; total: number; prefix: number } | null {
   const [ip, prefixStr] = cidr.trim().split('/')
   const prefix = parseInt(prefixStr, 10)
   const n = ip2int(ip ?? '')
   if (n === null || Number.isNaN(prefix) || prefix < 0 || prefix > 32) return null
   const mask = maskFromPrefix(prefix)
-  return { start: (n & mask) >>> 0, total: Math.pow(2, 32 - prefix) }
-}
-
-function pickGroupPrefix(
-  publicStart: number,
-  publicTotal: number,
-  privateStart: number,
-  privateTotal: number,
-): number | null {
-  for (const prefix of GROUP_PREFIX_CANDIDATES) {
-    const size = Math.pow(2, 32 - prefix)
-    if (size > publicTotal || size > privateTotal) continue
-    if (publicTotal % size !== 0 || privateTotal % size !== 0) continue
-    if (publicStart % size !== 0 || privateStart % size !== 0) continue
-    return prefix
-  }
-  return null
+  return { start: (n & mask) >>> 0, total: Math.pow(2, 32 - prefix), prefix }
 }
 
 function formatRouterosAdd(tokens: string[], width = 78): string {
@@ -78,13 +55,14 @@ function formatRouterosAdd(tokens: string[], width = 78): string {
   return lines.map((line, i) => (i < lines.length - 1 ? `${line} \\` : line)).join('\n')
 }
 
+/**
+ * Tek bir public bloğun (ör. /29) TAMAMINI port dilimleyerek kullanır.
+ * Abone havuzu, verilen private CIDR'ın boyutu kadar bir "aile" bloğudur
+ * (ör. /24); bu aile tükenince otomatik olarak bir sonraki aynı boyuttaki
+ * private bloğa geçilir (100.50.20.0/24 bitince 100.50.21.0/24 gibi) —
+ * public bloğun tüm port kapasitesi kullanılana kadar bu devam eder.
+ */
 export function planCgnat(input: CgnatPlanInput): CgnatPlanResult {
-  if (!isValidIPv4(input.publicStartIp)) {
-    return { ok: false, error: 'Geçersiz public başlangıç IP adresi.' }
-  }
-  if (!Number.isFinite(input.publicTotal) || input.publicTotal < 1) {
-    return { ok: false, error: 'Public havuz toplam IP sayısı en az 1 olmalı.' }
-  }
   if (!Number.isFinite(input.startPort) || input.startPort < 1 || input.startPort > MAX_PORT) {
     return { ok: false, error: 'Başlangıç portu 1 ile 65535 arasında olmalı.' }
   }
@@ -92,26 +70,25 @@ export function planCgnat(input: CgnatPlanInput): CgnatPlanResult {
     return { ok: false, error: 'Abone başına port genişliği en az 1 olmalı.' }
   }
 
-  const publicStart = ip2int(input.publicStartIp)
-  if (publicStart === null) {
-    return { ok: false, error: 'Geçersiz public başlangıç IP adresi.' }
+  const pub = parseFullCidr(input.publicCidr)
+  if (!pub) {
+    return { ok: false, error: 'Public havuz geçersiz. Örnek: 203.0.113.96/29' }
+  }
+  const priv = parseFullCidr(input.privateCidr)
+  if (!priv) {
+    return { ok: false, error: 'Abone havuzu geçersiz. Örnek: 100.64.20.0/24' }
   }
 
-  const privatePool = parseFullCidr(input.privateCidr)
-  if (!privatePool) {
-    return { ok: false, error: "Abone havuzu geçersiz. Örnek: 100.64.15.0/24" }
-  }
-  const { start: privateStart, total: privateTotal } = privatePool
+  const groupSize = pub.total
+  const groupPrefix = pub.prefix
+  const privateFamilySize = priv.total
 
-  const groupPrefix = pickGroupPrefix(publicStart, input.publicTotal, privateStart, privateTotal)
-  if (groupPrefix === null) {
+  if (privateFamilySize < groupSize || privateFamilySize % groupSize !== 0) {
     return {
       ok: false,
-      error:
-        'Public havuz ile abone havuzu birbiriyle uyumlu gruplara bölünemedi. Başlangıç IP\'lerinin ve toplam sayıların 8\'in katı olacak şekilde hizalanmasını deneyin.',
+      error: `Abone havuzu bloğu (/${priv.prefix}), public bloktan (/${groupPrefix}) daha küçük veya ona tam bölünemiyor. Abone havuzu en az public blok kadar geniş olmalı (ör. public /29 ise abone havuzu /24 gibi daha büyük bir blok olabilir).`,
     }
   }
-  const groupSize = Math.pow(2, 32 - groupPrefix)
 
   const slicesPerPublicGroup = Math.floor((MAX_PORT - input.startPort + 1) / input.portWidth)
   if (slicesPerPublicGroup < 1) {
@@ -122,97 +99,86 @@ export function planCgnat(input: CgnatPlanInput): CgnatPlanResult {
     }
   }
 
-  const publicGroupCount = input.publicTotal / groupSize
-  const privateGroupCount = privateTotal / groupSize
-  const capacityGroups = publicGroupCount * slicesPerPublicGroup
-  const capacityHosts = capacityGroups * groupSize
-  const neededHosts = privateTotal
-  const fits = privateGroupCount <= capacityGroups
-  const assignedGroupCount = Math.min(privateGroupCount, capacityGroups)
-  const assignedHostCount = assignedGroupCount * groupSize
-  const unassignedGroupCount = privateGroupCount - assignedGroupCount
-  const unassignedHostCount = unassignedGroupCount * groupSize
-
-  if (assignedHostCount > MAX_HOSTS) {
+  const capacityHosts = slicesPerPublicGroup * groupSize
+  if (capacityHosts > MAX_HOSTS) {
     return {
       ok: false,
-      error: `Bu havuz boyutu (${assignedHostCount} host) tarayıcıda güvenle üretilemeyecek kadar büyük. Lütfen abone havuzunu ${MAX_HOSTS} hostun altında tutacak şekilde parçalara bölün.`,
+      error: `Bu public blok (${capacityHosts} abone kapasitesi) tarayıcıda güvenle üretilemeyecek kadar büyük. Abone başına port genişliğini artırın (daha az port dilimi) veya daha küçük bir public blok kullanın.`,
     }
   }
+
+  const chunksPerFamily = privateFamilySize / groupSize
+  const publicGroupCidr = `${int2ip(pub.start)}/${groupPrefix}`
 
   const mikrotikLines: string[] = ['/ip firewall nat']
   const radiusLines: string[] = []
 
-  let privateGroupIndex = 0
-  for (let pg = 0; pg < publicGroupCount && privateGroupIndex < assignedGroupCount; pg++) {
-    const publicGroupStart = publicStart + pg * groupSize
-    const publicGroupCidr = `${int2ip(publicGroupStart)}/${groupPrefix}`
+  let familyIndex = 0
+  let chunkInFamily = 0
 
-    for (
-      let slice = 0;
-      slice < slicesPerPublicGroup && privateGroupIndex < assignedGroupCount;
-      slice++
-    ) {
-      const privateGroupStart = privateStart + privateGroupIndex * groupSize
-      const privateGroupCidr = `${int2ip(privateGroupStart)}/${groupPrefix}`
-      const portStart = input.startPort + slice * input.portWidth
-      const portEnd = portStart + input.portWidth - 1
-      const portRange = `${portStart}-${portEnd}`
+  for (let slice = 0; slice < slicesPerPublicGroup; slice++) {
+    const privateChunkStart = priv.start + familyIndex * privateFamilySize + chunkInFamily * groupSize
+    const privateGroupCidr = `${int2ip(privateChunkStart)}/${groupPrefix}`
+    const portStart = input.startPort + slice * input.portWidth
+    const portEnd = portStart + input.portWidth - 1
+    const portRange = `${portStart}-${portEnd}`
 
-      for (const protocol of ['udp', 'tcp']) {
-        mikrotikLines.push(
-          formatRouterosAdd([
-            'action=netmap',
-            'chain=srcnat',
-            `comment=${input.comment}`,
-            `out-interface=${input.iface}`,
-            `protocol=${protocol}`,
-            `src-address=${privateGroupCidr}`,
-            `to-addresses=${publicGroupCidr}`,
-            `to-ports=${portRange}`,
-          ]),
-        )
-      }
-      if (input.includeIcmp) {
-        mikrotikLines.push(
-          formatRouterosAdd([
-            'action=netmap',
-            'chain=srcnat',
-            `comment=${input.comment}`,
-            `out-interface=${input.iface}`,
-            'protocol=icmp',
-            `src-address=${privateGroupCidr}`,
-            `to-addresses=${publicGroupCidr}`,
-          ]),
-        )
-      }
+    for (const protocol of ['udp', 'tcp']) {
+      mikrotikLines.push(
+        formatRouterosAdd([
+          'action=netmap',
+          'chain=srcnat',
+          `comment=${input.comment}`,
+          `out-interface=${input.iface}`,
+          `protocol=${protocol}`,
+          `src-address=${privateGroupCidr}`,
+          `to-addresses=${publicGroupCidr}`,
+          `to-ports=${portRange}`,
+        ]),
+      )
+    }
+    if (input.includeIcmp) {
+      mikrotikLines.push(
+        formatRouterosAdd([
+          'action=netmap',
+          'chain=srcnat',
+          `comment=${input.comment}`,
+          `out-interface=${input.iface}`,
+          'protocol=icmp',
+          `src-address=${privateGroupCidr}`,
+          `to-addresses=${publicGroupCidr}`,
+        ]),
+      )
+    }
 
-      for (let h = 0; h < groupSize; h++) {
-        const privIp = int2ip(privateGroupStart + h)
-        const pubIp = int2ip(publicGroupStart + h)
-        radiusLines.push(`${privIp} ${pubIp} ${portRange}`)
-      }
+    for (let h = 0; h < groupSize; h++) {
+      const privIp = int2ip(privateChunkStart + h)
+      const pubIp = int2ip(pub.start + h)
+      radiusLines.push(`${privIp} ${pubIp} ${portRange}`)
+    }
 
-      privateGroupIndex++
+    chunkInFamily++
+    if (chunkInFamily >= chunksPerFamily) {
+      chunkInFamily = 0
+      familyIndex++
     }
   }
+
+  const familyBlocksUsed = familyIndex + (chunkInFamily > 0 ? 1 : 0)
+  const lastFamilyStart = priv.start + (familyBlocksUsed - 1) * privateFamilySize
 
   return {
     ok: true,
     plan: {
-      groupPrefix,
+      publicPrefix: groupPrefix,
+      publicNetwork: int2ip(pub.start),
       groupSize,
-      publicGroupCount,
-      privateGroupCount,
       slicesPerPublicGroup,
-      capacityGroups,
       capacityHosts,
-      neededHosts,
-      assignedGroupCount,
-      assignedHostCount,
-      unassignedGroupCount,
-      unassignedHostCount,
-      fits,
+      privateFamilyPrefix: priv.prefix,
+      firstPrivateFamilyNetwork: int2ip(priv.start),
+      lastPrivateFamilyNetwork: int2ip(lastFamilyStart),
+      familyBlocksUsed,
       mikrotikConfig: mikrotikLines.join('\n'),
       radiusExport: radiusLines.join('\n'),
       radiusLineCount: radiusLines.length,

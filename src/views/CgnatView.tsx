@@ -7,8 +7,7 @@ import { CrossStrip } from '../components/CrossStrip'
 import { planCgnat, type CgnatPlan } from '../lib/cgnat'
 
 export function CgnatView() {
-  const [publicStartIp, setPublicStartIp] = useState('')
-  const [publicTotal, setPublicTotal] = useState('')
+  const [publicCidr, setPublicCidr] = useState('')
   const [privateCidr, setPrivateCidr] = useState('')
   const [startPort, setStartPort] = useState(1000)
   const [portWidth, setPortWidth] = useState(1500)
@@ -21,8 +20,7 @@ export function CgnatView() {
 
   function handlePlan() {
     const outcome = planCgnat({
-      publicStartIp: publicStartIp.trim(),
-      publicTotal: Number(publicTotal),
+      publicCidr: publicCidr.trim(),
       privateCidr: privateCidr.trim(),
       startPort,
       portWidth,
@@ -50,10 +48,10 @@ export function CgnatView() {
           CGNAT Toplu Netmap ve RADIUS Dışa Aktarım
         </h1>
         <p className="text-[14.5px] leading-relaxed text-text-muted">
-          Public havuzunuzu ve abonelere ayrılan private havuzu otomatik olarak gruplara bölüp
-          port dilimleyerek eşleştirir. Kaç abonenin sığdığını hesaplar, sığan kısım için
-          MikroTik netmap kurallarını ve RADIUS firmasına verilecek IP↔port eşleme dosyasını
-          üretir.
+          Verdiğiniz public bloğun (ör. /29, /28) tamamı port dilimlenerek kullanılır. Abone
+          havuzu bloğu (ör. /24) yetmezse araç otomatik olarak bir sonraki aynı boyuttaki private
+          bloğa geçer. Sonuç olarak MikroTik netmap kurallarını ve RADIUS firmasına verilecek
+          IP↔port eşleme dosyasını üretir.
         </p>
       </div>
 
@@ -61,27 +59,18 @@ export function CgnatView() {
         <RackCardHeader unitTag="1U — Havuzlar" ready={!!result} readyLabel="planlandı" />
 
         <div className="grid grid-cols-1 gap-x-[22px] gap-y-[18px] sm:grid-cols-2">
-          <Field label="Public Havuz Başlangıç IP">
+          <Field label="Public Havuz (CIDR)">
             <input
               className={inputClass}
-              placeholder="örn. 203.0.113.96"
-              value={publicStartIp}
-              onChange={(e) => setPublicStartIp(e.target.value)}
+              placeholder="örn. 203.0.113.96/29"
+              value={publicCidr}
+              onChange={(e) => setPublicCidr(e.target.value)}
             />
           </Field>
-          <Field label="Public Havuz Toplam IP Sayısı">
-            <input
-              type="number"
-              className={inputClass}
-              placeholder="örn. 32"
-              value={publicTotal}
-              onChange={(e) => setPublicTotal(e.target.value)}
-            />
-          </Field>
-          <Field label="Abone (Private) Havuzu">
+          <Field label="Abone (Private) Havuzu Başlangıç Bloğu">
             <input
               className={inputClass}
-              placeholder="örn. 100.64.15.0/24"
+              placeholder="örn. 100.64.20.0/24"
               value={privateCidr}
               onChange={(e) => setPrivateCidr(e.target.value)}
             />
@@ -142,24 +131,23 @@ export function CgnatView() {
       {result && (
         <>
           <VerdictCard
-            positive={result.fits}
-            title={
-              result.fits
-                ? `Tamamı sığıyor — ${result.assignedHostCount} abonenin tamamı bu public havuza yerleşti`
-                : `Kısmen sığıyor — ${result.assignedHostCount} / ${result.neededHosts} abone yerleşti, ${result.unassignedHostCount} abone için havuz yetersiz`
-            }
+            positive
+            title={`Public blok tamamen kullanıldı — ${result.capacityHosts} abone eşlendi`}
             subtitle={
               <>
-                {result.publicGroupCount} public grup (/{result.groupPrefix}) × grup başına{' '}
-                {result.slicesPerPublicGroup} port dilimi = {result.capacityGroups} grup ={' '}
-                {result.capacityHosts} abone kapasitesi. Abone havuzunda {result.privateGroupCount}{' '}
-                grup ({result.neededHosts} host) var.
-                {!result.fits && (
+                {result.publicNetwork}/{result.publicPrefix} ({result.groupSize} IP) × {result.slicesPerPublicGroup}{' '}
+                port dilimi = {result.capacityHosts} abone.{' '}
+                {result.familyBlocksUsed > 1 ? (
                   <>
-                    {' '}
-                    Kalan {result.unassignedGroupCount} grubu (
-                    {result.unassignedHostCount} abone) yerleştirmek için public havuzu
-                    büyütün veya port genişliğini azaltın.
+                    {result.firstPrivateFamilyNetwork}/{result.privateFamilyPrefix} bloğu yetmediği
+                    için {result.familyBlocksUsed} adet /{result.privateFamilyPrefix}'lük blok
+                    kullanıldı ({result.firstPrivateFamilyNetwork} — {result.lastPrivateFamilyNetwork}{' '}
+                    arası).
+                  </>
+                ) : (
+                  <>
+                    Tamamı {result.firstPrivateFamilyNetwork}/{result.privateFamilyPrefix} bloğu
+                    içinden karşılandı.
                   </>
                 )}
               </>
